@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Kimhab Space design tokens — "personal universe"
+   ============================================================ */
+:root {
+  --void: #0b0d1a; /* page background — deep space navy, never pure black */
+  --surface: #14172b; /* cards, panels */
+  --raised: #1d2140; /* hover states, elevated chips */
+  --ink: #edeeff; /* primary text */
+  --muted: #9aa0c3; /* secondary text */
+  --nebula: #7c5cff; /* primary accent — violet */
+  --aurora: #4de1ff; /* secondary accent — cyan, hero + tiny highlights only */
+  --star: #ffd166; /* trust color — checksums, verified, ratings */
+  /* Reserved for the hero wordmark and primary CTA only. */
+  --grad: linear-gradient(120deg, var(--nebula), var(--aurora));
+}
+
+@theme inline {
+  --color-void: var(--void);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-nebula: var(--nebula);
+  --color-aurora: var(--aurora);
+  --color-star: var(--star);
+
+  --font-display: var(--font-unbounded), sans-serif;
+  --font-body: var(--font-space-grotesk), sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+}
+
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-space-grotesk), sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nebula) 55%, transparent);
+  color: var(--ink);
+}
+
+/* Visible keyboard focus — non-negotiable */
+:focus-visible {
+  outline: 2px solid var(--nebula);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Hero type scale: clamp(2.75rem – 5rem) */
+.text-hero {
+  font-size: clamp(2.75rem, 5.5vw + 1rem, 5rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+/* Gradient text — wordmark only */
+.text-grad {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary CTA — the only other place the gradient lives */
+.btn-grad {
+  background: var(--grad);
+  color: #0b0d1a;
+  font-weight: 700;
+  border-radius: 14px;
+  transition: box-shadow 200ms ease, filter 200ms ease;
+}
+.btn-grad:hover {
+  box-shadow:
+    inset 0 0 18px rgba(255, 255, 255, 0.35),
+    0 4px 28px -6px color-mix(in srgb, var(--nebula) 60%, transparent);
+  filter: brightness(1.05);
+}
+
+.btn-outline {
+  border: 1px solid var(--nebula);
+  color: var(--ink);
+  border-radius: 14px;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+.btn-outline:hover {
+  background: color-mix(in srgb, var(--nebula) 14%, transparent);
+}
+
+/* ============================================================
+   Orbit field — the signature moment
+   Carrier spins (squashed to an ellipse); satellite counter-spins
+   (and un-squashes) so icons stay upright and undistorted.
+   Base transforms hold the static constellation; under
+   prefers-reduced-motion the animation collapses instantly and
+   the base transforms are what you see.
+   ============================================================ */
+@keyframes orbit-spin {
+  from { transform: scaleY(0.72) rotate(0deg); }
+  to   { transform: scaleY(0.72) rotate(360deg); }
+}
+@keyframes orbit-counter {
+  from { transform: rotate(0deg) scaleY(1.3889); }
+  to   { transform: rotate(-360deg) scaleY(1.3889); }
+}
+.orbit-carrier {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: scaleY(0.72) rotate(var(--angle, 0deg));
+  animation: orbit-spin var(--dur, 50s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+.orbit-sat {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  transform: rotate(calc(var(--angle, 0deg) * -1)) scaleY(1.3889);
+  animation: orbit-counter var(--dur, 50s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+.orbit-ellipse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  transform: scaleY(0.72);
+}
+
+/* Mobile: orbits collapse into a gently floating cluster */
+@keyframes float-soft {
+  from { transform: translateY(-5px); }
+  to   { transform: translateY(5px); }
+}
+.float-soft {
+  animation: float-soft var(--dur, 5s) ease-in-out infinite alternate;
+  animation-delay: var(--delay, 0s);
+}
+
+/* Starfield twinkle — a few stars on a 4–6s cycle */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.5; }
+}
+.twinkle {
+  animation: twinkle var(--dur, 5s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+/* Fine grain overlay for texture (~3%) */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Hide scrollbars on pill rows / carousels without killing scroll */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Respect prefers-reduced-motion globally: animations collapse,
+   orbit elements fall back to their static base transforms. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
