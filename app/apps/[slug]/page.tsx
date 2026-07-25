@@ -131,6 +131,13 @@ export default async function AppDetailPage({
           </a>{" "}
           if anything looks off.
         </p>
+        <p className="mt-2 text-xs text-muted">
+          Downloaded it? Check it against the checksum above with the{" "}
+          <a href="/tools/apk-verifier" className="text-nebula hover:text-ink">
+            in-browser APK verifier
+          </a>{" "}
+          — no commands needed.
+        </p>
 
         {app.ios && (app.ios.testflightUrl || app.ios.appstoreUrl) && (
           <div className="mt-6 border-t border-white/5 pt-5">

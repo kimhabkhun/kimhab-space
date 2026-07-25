@@ -6,6 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages = [
     "",
     "/apps",
+    "/tools/apk-verifier",
     "/install",
     "/about",
     "/terms",

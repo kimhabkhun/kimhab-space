@@ -5,6 +5,7 @@ const columns = [
     title: "Explore",
     links: [
       { href: "/apps", label: "All apps" },
+      { href: "/tools/apk-verifier", label: "APK verifier" },
       { href: "/install", label: "How to install" },
       { href: "/about", label: "About" },
     ],

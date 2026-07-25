@@ -182,6 +182,14 @@ export default function InstallPage() {
           Swap <code className="font-mono">app.apk</code> for the actual file
           name you downloaded.
         </p>
+        <p className="mt-4 text-sm text-muted">
+          Not a command-line person? Use the{" "}
+          <a href="/tools/apk-verifier" className="text-nebula hover:text-ink">
+            in-browser APK verifier
+          </a>{" "}
+          instead — drop the file in, compare the hash, done. Nothing gets
+          uploaded.
+        </p>
       </section>
 
       {/* FAQ */}
