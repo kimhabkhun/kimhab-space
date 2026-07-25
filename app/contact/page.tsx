@@ -18,7 +18,7 @@ export default function ContactPage() {
 
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
         <a
-          href="mailto:kimhabkhun9@gmail.com"
+          href="mailto:khunkimhab7@gmail.com"
           className="group rounded-[20px] border border-white/[0.06] bg-surface p-6 transition-colors hover:border-nebula/50"
         >
           <span
@@ -35,7 +35,7 @@ export default function ContactPage() {
             Best for bug reports — include your app version.
           </p>
           <p className="mt-3 font-mono text-sm text-nebula group-hover:text-ink">
-            kimhabkhun9@gmail.com
+            khunkimhab7@gmail.com
           </p>
         </a>
 
@@ -63,7 +63,7 @@ export default function ContactPage() {
             Quicker for short questions and hellos.
           </p>
           <p className="mt-3 font-mono text-sm text-aurora group-hover:text-ink">
-            @TODO_REPLACE_TELEGRAM
+            @kimhabkhun
           </p>
         </a>
       </div>

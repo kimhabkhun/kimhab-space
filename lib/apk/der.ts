@@ -127,6 +127,41 @@ export function parseCertificateNames(der: Uint8Array): CertNames {
 }
 
 /**
+ * Extract the signed content (eContent) from a PKCS#7/CMS SignedData
+ * blob — used for iOS embedded.mobileprovision files, whose payload is
+ * an XML plist wrapped in a CMS signature.
+ */
+export function pkcs7Content(der: Uint8Array): Uint8Array | null {
+  try {
+    const root = readTlv(der, 0);
+    const explicit = derChildren(der, root).find((k) => k.tag === 0xa0);
+    if (!explicit) return null;
+    const signedData = readTlv(der, explicit.start);
+    const encap = derChildren(der, signedData).find((k) => k.tag === 0x30);
+    if (!encap) return null;
+    const eContent = derChildren(der, encap).find((k) => k.tag === 0xa0);
+    if (!eContent) return null;
+    const octets = readTlv(der, eContent.start);
+    if (octets.tag === 0x04) return der.slice(octets.start, octets.end);
+    if (octets.tag === 0x24) {
+      // constructed OCTET STRING — concatenate the segments
+      const parts = derChildren(der, octets).filter((c) => c.tag === 0x04);
+      const total = parts.reduce((n, c) => n + c.length, 0);
+      const out = new Uint8Array(total);
+      let o = 0;
+      for (const c of parts) {
+        out.set(der.subarray(c.start, c.end), o);
+        o += c.length;
+      }
+      return out;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extract certificate DERs from a PKCS#7/CMS SignedData blob
  * (the META-INF/*.RSA|DSA|EC file used by APK signature scheme v1).
  */

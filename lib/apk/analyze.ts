@@ -1,8 +1,9 @@
 /**
- * APK analysis orchestrator — runs entirely in the browser. The file is
- * read into memory, hashed, and structurally parsed. It is never
- * uploaded, stored, or executed; when the page is closed or a new file
- * is analyzed, the memory is released.
+ * App-file analysis orchestrator — runs entirely in the browser and
+ * handles both Android APKs and iOS IPAs (auto-detected from the ZIP
+ * contents). The file is read into memory, hashed, and structurally
+ * parsed. It is never uploaded, stored, or executed; when the page is
+ * closed or a new file is analyzed, the memory is released.
  */
 
 import { sha256Hex, sha1Hex } from "./binary";
@@ -17,8 +18,15 @@ import {
 } from "./sigblock";
 import { certsFromPkcs7, parseCertificateNames } from "./der";
 import { parseBinaryManifest, type ManifestInfo } from "./axml";
+import {
+  findIpaAppDir,
+  readIosInfo,
+  readIosSignature,
+  type IosResult,
+} from "../ipa/ipa";
 
-export type StageKey = "read" | "hashes" | "zip" | "signature" | "manifest";
+export type AppKind = "apk" | "ipa" | "unknown";
+export type StageKey = "read" | "hashes" | "zip" | "manifest" | "signature";
 export type StageState = "pending" | "active" | "done" | "failed";
 
 export interface SignatureInfo {
@@ -31,19 +39,25 @@ export interface SignatureInfo {
 }
 
 export interface ApkAnalysis {
+  kind: AppKind;
   fileName: string;
   fileSizeBytes: number;
   hashes: { sha256: string; sha1: string; md5: string };
   zipError?: string;
+  /** Android */
   signature?: SignatureInfo;
   manifest?: ManifestInfo;
   manifestError?: string;
+  /** iOS */
+  ios?: IosResult;
 }
 
 export interface AnalyzeCallbacks {
   onStage?: (stage: StageKey, state: StageState) => void;
   onHashProgress?: (pct: number) => void;
 }
+
+const norm = (name: string) => name.replace(/\\/g, "/");
 
 export async function analyzeApk(file: File, cb: AnalyzeCallbacks = {}): Promise<ApkAnalysis> {
   const stage = (s: StageKey, st: StageState) => cb.onStage?.(s, st);
@@ -58,6 +72,7 @@ export async function analyzeApk(file: File, cb: AnalyzeCallbacks = {}): Promise
   stage("hashes", "done");
 
   const result: ApkAnalysis = {
+    kind: "unknown",
     fileName: file.name,
     fileSizeBytes: u8.length,
     hashes: { sha256, sha1, md5 },
@@ -74,16 +89,54 @@ export async function analyzeApk(file: File, cb: AnalyzeCallbacks = {}): Promise
   } catch (e) {
     result.zipError = e instanceof Error ? e.message : "Could not read ZIP structure.";
     stage("zip", "failed");
-    stage("signature", "failed");
     stage("manifest", "failed");
+    stage("signature", "failed");
     return result;
+  }
+
+  const isApk = entries.some((en) => norm(en.name) === "AndroidManifest.xml");
+  const appDir = isApk ? null : findIpaAppDir(entries);
+  result.kind = isApk ? "apk" : appDir ? "ipa" : "unknown";
+
+  if (result.kind === "apk") {
+    await analyzeAndroid(u8, entries, cdOffset, result, stage);
+  } else if (result.kind === "ipa" && appDir) {
+    await analyzeIos(u8, entries, appDir, result, stage);
+  } else {
+    result.zipError =
+      "This is a valid ZIP, but it doesn't look like an APK (no AndroidManifest.xml) or an IPA (no Payload/*.app). Hashes are still valid for comparison.";
+    stage("manifest", "failed");
+    stage("signature", "failed");
+  }
+  return result;
+}
+
+/* ---------------- Android ---------------- */
+
+async function analyzeAndroid(
+  u8: Uint8Array,
+  entries: ZipEntry[],
+  cdOffset: number,
+  result: ApkAnalysis,
+  stage: (s: StageKey, st: StageState) => void
+): Promise<void> {
+  stage("manifest", "active");
+  try {
+    const manifestEntry = entries.find((en) => norm(en.name) === "AndroidManifest.xml");
+    if (!manifestEntry) throw new Error("AndroidManifest.xml not found in the archive.");
+    const data = await readEntry(u8, manifestEntry);
+    result.manifest = parseBinaryManifest(data);
+    stage("manifest", "done");
+  } catch (e) {
+    result.manifestError = e instanceof Error ? e.message : "Could not parse the manifest.";
+    stage("manifest", "failed");
   }
 
   stage("signature", "active");
   try {
-    const v1SigEntry = entries.find((en) => /^META-INF\/.+\.(RSA|DSA|EC)$/i.test(en.name));
+    const v1SigEntry = entries.find((en) => /^META-INF\/.+\.(RSA|DSA|EC)$/i.test(norm(en.name)));
     const hasV1 =
-      entries.some((en) => /^META-INF\/.+\.SF$/i.test(en.name)) || Boolean(v1SigEntry);
+      entries.some((en) => /^META-INF\/.+\.SF$/i.test(norm(en.name))) || Boolean(v1SigEntry);
 
     const block = parseApkSigningBlock(u8, cdOffset);
     const schemes = {
@@ -132,18 +185,38 @@ export async function analyzeApk(file: File, cb: AnalyzeCallbacks = {}): Promise
     };
     stage("signature", "failed");
   }
+}
 
+/* ---------------- iOS ---------------- */
+
+async function analyzeIos(
+  u8: Uint8Array,
+  entries: ZipEntry[],
+  appDir: string,
+  result: ApkAnalysis,
+  stage: (s: StageKey, st: StageState) => void
+): Promise<void> {
   stage("manifest", "active");
+  let info: IosResult["info"];
+  let infoError: string | undefined;
   try {
-    const manifestEntry = entries.find((en) => en.name === "AndroidManifest.xml");
-    if (!manifestEntry) throw new Error("AndroidManifest.xml not found in the archive.");
-    const data = await readEntry(u8, manifestEntry);
-    result.manifest = parseBinaryManifest(data);
+    info = await readIosInfo(u8, entries, appDir);
     stage("manifest", "done");
   } catch (e) {
-    result.manifestError = e instanceof Error ? e.message : "Could not parse the manifest.";
+    infoError = e instanceof Error ? e.message : "Could not read Info.plist.";
     stage("manifest", "failed");
   }
 
-  return result;
+  stage("signature", "active");
+  let signature: IosResult["signature"];
+  try {
+    signature = await readIosSignature(u8, entries, appDir, info?.executable);
+    stage("signature", signature.certSha256 ? "done" : "failed");
+  } catch (e) {
+    signature = {
+      error: e instanceof Error ? e.message : "Signature extraction failed.",
+    };
+    stage("signature", "failed");
+  }
+  result.ios = { info, infoError, signature };
 }

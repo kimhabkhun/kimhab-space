@@ -3,20 +3,21 @@ import Link from "next/link";
 import ApkVerifier from "@/components/ApkVerifier";
 
 export const metadata: Metadata = {
-  title: "APK verifier",
+  title: "APK & IPA verifier",
   description:
-    "Verify any APK before installing: SHA-256/SHA-1/MD5 hashes, signing certificate fingerprints, and package info — computed entirely in your browser. Nothing is uploaded.",
+    "Verify Android APKs and iOS IPAs before installing: SHA-256/SHA-1/MD5 hashes, signing certificate fingerprints, and app info — computed entirely in your browser. Nothing is uploaded.",
 };
 
 export default function ApkVerifierPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6">
       <h1 className="font-display text-[2.5rem] font-bold leading-tight">
-        APK verifier
+        APK &amp; IPA verifier
       </h1>
       <p className="mt-3 max-w-xl text-muted">
-        Check that an APK really is the one the developer built — file hashes,
-        signing certificate, and package details, before you install anything.
+        Check that an app file really is the one the developer built — file
+        hashes, signing certificate, and app details, before you install
+        anything. Android APKs and iOS IPAs, auto-detected.
       </p>
 
       {/* Privacy notice — the headline feature */}
@@ -45,7 +46,7 @@ export default function ApkVerifierPage() {
         <ol className="mt-4 space-y-2 text-sm leading-relaxed text-muted">
           <li className="flex gap-2">
             <span aria-hidden="true" className="text-nebula">1.</span>
-            Download an APK — from{" "}
+            Download an APK or IPA — from{" "}
             <Link href="/apps" className="text-nebula hover:text-ink">
               my apps
             </Link>{" "}
@@ -68,6 +69,12 @@ export default function ApkVerifierPage() {
             install guide
           </Link>{" "}
           has one-line checksum commands for Windows, macOS, and Linux.
+        </p>
+        <p className="mt-4 text-sm leading-relaxed text-muted">
+          iOS note: App Store and TestFlight install apps directly, so most
+          people never handle a raw .ipa. This is for sideloaded builds
+          (AltStore and friends), enterprise distributions, and developers
+          checking their own exports.
         </p>
       </section>
     </div>

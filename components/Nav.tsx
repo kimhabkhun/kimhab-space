@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 
 const links = [
   { href: "/apps", label: "Apps" },
-  { href: "/tools/apk-verifier", label: "Verify APK" },
+  { href: "/tools/apk-verifier", label: "Verify app" },
   { href: "/install", label: "How to install" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },

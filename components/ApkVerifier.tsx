@@ -14,9 +14,15 @@ const STAGES: { key: StageKey; label: string }[] = [
   { key: "read", label: "Reading file" },
   { key: "hashes", label: "Computing hashes" },
   { key: "zip", label: "Reading ZIP structure" },
+  { key: "manifest", label: "Parsing app metadata" },
   { key: "signature", label: "Extracting signature" },
-  { key: "manifest", label: "Parsing manifest" },
 ];
+
+const KIND_LABEL: Record<ApkAnalysis["kind"], string> = {
+  apk: "Android APK",
+  ipa: "iOS IPA",
+  unknown: "Unrecognized format",
+};
 
 type Phase = "idle" | "working" | "done" | "fatal";
 
@@ -76,13 +82,7 @@ function HashRow({
   );
 }
 
-function Card({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[20px] border border-white/[0.06] bg-surface p-5 sm:p-6">
       <h2 className="text-lg font-medium">{title}</h2>
@@ -112,6 +112,9 @@ function MatchBadge({ state }: { state: "match" | "mismatch" }) {
   );
 }
 
+const CERT_DISCLAIMER =
+  "The certificate is extracted and fingerprinted, not cryptographically validated against every byte of the file — so always compare the file hash above as well. What matters is that the fingerprint matches the developer's published one.";
+
 /* ---------- the verifier ---------- */
 
 export default function ApkVerifier() {
@@ -120,8 +123,8 @@ export default function ApkVerifier() {
     read: "pending",
     hashes: "pending",
     zip: "pending",
-    signature: "pending",
     manifest: "pending",
+    signature: "pending",
   });
   const [hashPct, setHashPct] = useState(0);
   const [result, setResult] = useState<ApkAnalysis | null>(null);
@@ -136,7 +139,7 @@ export default function ApkVerifier() {
     setResult(null);
     setFatal("");
     setHashPct(0);
-    setStages({ read: "pending", hashes: "pending", zip: "pending", signature: "pending", manifest: "pending" });
+    setStages({ read: "pending", hashes: "pending", zip: "pending", manifest: "pending", signature: "pending" });
     try {
       const analysis = await analyzeApk(file, {
         onStage: (stage, state) => setStages((s) => ({ ...s, [stage]: state })),
@@ -159,6 +162,10 @@ export default function ApkVerifier() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
+  // Certificate source differs per platform; comparison logic doesn't.
+  const certSha256 =
+    result?.kind === "ipa" ? result.ios?.signature.certSha256 : result?.signature?.certSha256;
+
   const hashCompare = (() => {
     const wanted = normalizeHex(officialHash);
     if (!wanted || !result) return null;
@@ -168,13 +175,14 @@ export default function ApkVerifier() {
 
   const certCompare = (() => {
     const wanted = normalizeHex(officialCert);
-    if (!wanted || !result?.signature?.certSha256) return null;
+    if (!wanted || !certSha256) return null;
     if (wanted.length !== 64) return "partial" as const;
-    return wanted === result.signature.certSha256 ? ("match" as const) : ("mismatch" as const);
+    return wanted === certSha256 ? ("match" as const) : ("mismatch" as const);
   })();
 
   const sig = result?.signature;
   const man = result?.manifest;
+  const ios = result?.ios;
 
   return (
     <div className="space-y-6">
@@ -199,9 +207,9 @@ export default function ApkVerifier() {
           <p aria-hidden="true" className="text-3xl">
             🛰️
           </p>
-          <p className="mt-3 font-medium">Drop an APK here</p>
+          <p className="mt-3 font-medium">Drop an APK or IPA here</p>
           <p className="mt-1 text-sm text-muted">
-            or pick one from your device — it never leaves your browser
+            Android or iOS — either way, it never leaves your browser
           </p>
           <button
             type="button"
@@ -209,14 +217,14 @@ export default function ApkVerifier() {
             disabled={phase === "working"}
             className="btn-outline mt-5 inline-block px-5 py-2.5 text-sm disabled:opacity-50"
           >
-            Choose APK file
+            Choose a file
           </button>
           <input
             ref={inputRef}
             type="file"
-            accept=".apk,application/vnd.android.package-archive"
+            accept=".apk,.ipa,application/vnd.android.package-archive"
             className="sr-only"
-            aria-label="Choose an APK file to verify"
+            aria-label="Choose an APK or IPA file to verify"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void handleFile(file);
@@ -269,8 +277,13 @@ export default function ApkVerifier() {
       {phase === "done" && result && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="min-w-0 truncate font-mono text-sm text-muted">
-              {result.fileName} · {formatBytes(result.fileSizeBytes)}
+            <p className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded-full border border-white/10 bg-raised px-2.5 py-1 text-xs text-ink/90">
+                {KIND_LABEL[result.kind]}
+              </span>
+              <span className="min-w-0 truncate font-mono text-sm text-muted">
+                {result.fileName} · {formatBytes(result.fileSizeBytes)}
+              </span>
             </p>
             <button type="button" onClick={reset} className="btn-outline px-4 py-2 text-sm">
               Verify another file
@@ -279,8 +292,7 @@ export default function ApkVerifier() {
 
           {result.zipError && (
             <div className="rounded-[20px] border border-star/40 bg-star/[0.06] p-5 text-sm text-muted">
-              <span className="font-medium text-star">Note:</span> {result.zipError} File hashes
-              below are still valid for comparison.
+              <span className="font-medium text-star">Note:</span> {result.zipError}
             </div>
           )}
 
@@ -322,10 +334,10 @@ export default function ApkVerifier() {
                   onChange={(e) => setOfficialCert(e.target.value)}
                   placeholder="e.g. A1:B2:C3:… (colons optional)"
                   spellCheck={false}
-                  disabled={!sig?.certSha256}
+                  disabled={!certSha256}
                   className="mt-2 w-full rounded-xl border border-white/10 bg-void/40 px-4 py-3 font-mono text-xs text-ink placeholder:text-muted focus:border-nebula disabled:opacity-40"
                 />
-                {!sig?.certSha256 && (
+                {!certSha256 && (
                   <p className="mt-2 text-xs text-muted">
                     No certificate could be extracted from this file, so fingerprint comparison is
                     unavailable.
@@ -356,95 +368,178 @@ export default function ApkVerifier() {
             </div>
           </Card>
 
-          {/* Signature */}
-          <Card title="Signing certificate">
-            {sig && (
-              <>
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["v1 (JAR)", sig.schemes.v1],
-                      ["v2", sig.schemes.v2],
-                      ["v3", sig.schemes.v3],
-                      ["v3.1", sig.schemes.v31],
-                    ] as const
-                  ).map(([label, present]) => (
-                    <span
-                      key={label}
-                      className={`rounded-full border px-3 py-1 font-mono text-xs ${
-                        present
-                          ? "border-star/60 bg-star/10 text-star"
-                          : "border-white/10 text-muted"
-                      }`}
-                    >
-                      {present ? "✓" : "–"} {label}
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-2 text-[11px] text-muted">
-                  Scheme v4 lives in a separate .idsig file, so it can&apos;t be detected from the
-                  APK alone.
-                </p>
-
-                {sig.certSha256 && (
-                  <div className="mt-4 space-y-3">
-                    <HashRow name="SHA-256" value={colonize(sig.certSha256)} highlight />
-                    {sig.certSha1 && <HashRow name="SHA-1" value={colonize(sig.certSha1)} />}
-                    <dl>
-                      {sig.subject && <InfoRow label="Subject (who signed it)" value={sig.subject} />}
-                      {sig.issuer && <InfoRow label="Issuer" value={sig.issuer} />}
-                    </dl>
-                    <p className="text-[11px] leading-relaxed text-muted">
-                      The certificate is extracted and fingerprinted, not cryptographically
-                      validated against every byte of the file — so always compare the file hash
-                      above as well. Android app certificates are usually self-signed; that&apos;s
-                      normal. What matters is that the fingerprint matches the developer&apos;s
-                      published one.
-                    </p>
+          {/* Android: signature */}
+          {result.kind === "apk" && (
+            <Card title="Signing certificate">
+              {sig ? (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["v1 (JAR)", sig.schemes.v1],
+                        ["v2", sig.schemes.v2],
+                        ["v3", sig.schemes.v3],
+                        ["v3.1", sig.schemes.v31],
+                      ] as const
+                    ).map(([label, present]) => (
+                      <span
+                        key={label}
+                        className={`rounded-full border px-3 py-1 font-mono text-xs ${
+                          present
+                            ? "border-star/60 bg-star/10 text-star"
+                            : "border-white/10 text-muted"
+                        }`}
+                      >
+                        {present ? "✓" : "–"} {label}
+                      </span>
+                    ))}
                   </div>
-                )}
-                {sig.error && <p className="mt-4 text-sm text-muted">{sig.error}</p>}
-              </>
-            )}
-            {!sig && <p className="text-sm text-muted">Signature information unavailable.</p>}
-          </Card>
-
-          {/* APK info */}
-          <Card title="APK information">
-            {man ? (
-              <dl>
-                {man.label && <InfoRow label="Application name" value={man.label} />}
-                {man.packageName && <InfoRow label="Package name" value={man.packageName} />}
-                {man.versionName && <InfoRow label="Version name" value={man.versionName} />}
-                {man.versionCode !== undefined && (
-                  <InfoRow label="Version code" value={String(man.versionCode)} />
-                )}
-                {man.minSdk !== undefined && (
-                  <InfoRow
-                    label="Minimum Android"
-                    value={`API ${man.minSdk}${apiToAndroid(man.minSdk) ? ` (Android ${apiToAndroid(man.minSdk)})` : ""}`}
-                  />
-                )}
-                {man.targetSdk !== undefined && (
-                  <InfoRow
-                    label="Target Android"
-                    value={`API ${man.targetSdk}${apiToAndroid(man.targetSdk) ? ` (Android ${apiToAndroid(man.targetSdk)})` : ""}`}
-                  />
-                )}
-                <InfoRow label="APK size" value={formatBytes(result.fileSizeBytes)} />
-                {man.label === null && (
-                  <p className="pt-3 text-[11px] text-muted">
-                    The app name is stored as a localized resource inside the APK, which this tool
-                    doesn&apos;t unpack — the package name above is the reliable identifier.
+                  <p className="mt-2 text-[11px] text-muted">
+                    Scheme v4 lives in a separate .idsig file, so it can&apos;t be detected from
+                    the APK alone.
                   </p>
-                )}
-              </dl>
-            ) : (
-              <p className="text-sm text-muted">
-                {result.manifestError ?? "Manifest information unavailable."}
-              </p>
-            )}
-          </Card>
+
+                  {sig.certSha256 && (
+                    <div className="mt-4 space-y-3">
+                      <HashRow name="SHA-256" value={colonize(sig.certSha256)} highlight />
+                      {sig.certSha1 && <HashRow name="SHA-1" value={colonize(sig.certSha1)} />}
+                      <dl>
+                        {sig.subject && (
+                          <InfoRow label="Subject (who signed it)" value={sig.subject} />
+                        )}
+                        {sig.issuer && <InfoRow label="Issuer" value={sig.issuer} />}
+                      </dl>
+                      <p className="text-[11px] leading-relaxed text-muted">
+                        {CERT_DISCLAIMER} Android app certificates are usually self-signed;
+                        that&apos;s normal.
+                      </p>
+                    </div>
+                  )}
+                  {sig.error && <p className="mt-4 text-sm text-muted">{sig.error}</p>}
+                </>
+              ) : (
+                <p className="text-sm text-muted">Signature information unavailable.</p>
+              )}
+            </Card>
+          )}
+
+          {/* iOS: signature */}
+          {result.kind === "ipa" && (
+            <Card title="Signing certificate">
+              {ios?.signature ? (
+                <>
+                  <dl>
+                    {ios.signature.distribution && (
+                      <InfoRow label="Distribution type" value={ios.signature.distribution} />
+                    )}
+                    {ios.signature.teamId && (
+                      <InfoRow label="Team ID" value={ios.signature.teamId} />
+                    )}
+                    {ios.signature.identifier && (
+                      <InfoRow label="Code identifier" value={ios.signature.identifier} />
+                    )}
+                    {ios.signature.profileName && (
+                      <InfoRow label="Provisioning profile" value={ios.signature.profileName} />
+                    )}
+                    {ios.signature.profileTeamName && (
+                      <InfoRow label="Team name" value={ios.signature.profileTeamName} />
+                    )}
+                    {ios.signature.profileExpires && (
+                      <InfoRow
+                        label="Profile expires"
+                        value={ios.signature.profileExpires.slice(0, 10)}
+                      />
+                    )}
+                  </dl>
+
+                  {ios.signature.certSha256 && (
+                    <div className="mt-4 space-y-3">
+                      <HashRow name="SHA-256" value={colonize(ios.signature.certSha256)} highlight />
+                      {ios.signature.certSha1 && (
+                        <HashRow name="SHA-1" value={colonize(ios.signature.certSha1)} />
+                      )}
+                      <dl>
+                        {ios.signature.subject && (
+                          <InfoRow label="Subject (who signed it)" value={ios.signature.subject} />
+                        )}
+                        {ios.signature.issuer && (
+                          <InfoRow label="Issuer" value={ios.signature.issuer} />
+                        )}
+                      </dl>
+                      <p className="text-[11px] leading-relaxed text-muted">
+                        {CERT_DISCLAIMER} iOS certificates are issued by Apple to the developer —
+                        the issuer should be an Apple Worldwide Developer Relations CA.
+                      </p>
+                    </div>
+                  )}
+                  {ios.signature.error && (
+                    <p className="mt-4 text-sm text-muted">{ios.signature.error}</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted">Signature information unavailable.</p>
+              )}
+            </Card>
+          )}
+
+          {/* Android: app info */}
+          {result.kind === "apk" && (
+            <Card title="App information">
+              {man ? (
+                <dl>
+                  {man.label && <InfoRow label="Application name" value={man.label} />}
+                  {man.packageName && <InfoRow label="Package name" value={man.packageName} />}
+                  {man.versionName && <InfoRow label="Version name" value={man.versionName} />}
+                  {man.versionCode !== undefined && (
+                    <InfoRow label="Version code" value={String(man.versionCode)} />
+                  )}
+                  {man.minSdk !== undefined && (
+                    <InfoRow
+                      label="Minimum Android"
+                      value={`API ${man.minSdk}${apiToAndroid(man.minSdk) ? ` (Android ${apiToAndroid(man.minSdk)})` : ""}`}
+                    />
+                  )}
+                  {man.targetSdk !== undefined && (
+                    <InfoRow
+                      label="Target Android"
+                      value={`API ${man.targetSdk}${apiToAndroid(man.targetSdk) ? ` (Android ${apiToAndroid(man.targetSdk)})` : ""}`}
+                    />
+                  )}
+                  <InfoRow label="File size" value={formatBytes(result.fileSizeBytes)} />
+                  {man.label === null && (
+                    <p className="pt-3 text-[11px] text-muted">
+                      The app name is stored as a localized resource inside the APK, which this
+                      tool doesn&apos;t unpack — the package name above is the reliable identifier.
+                    </p>
+                  )}
+                </dl>
+              ) : (
+                <p className="text-sm text-muted">
+                  {result.manifestError ?? "Manifest information unavailable."}
+                </p>
+              )}
+            </Card>
+          )}
+
+          {/* iOS: app info */}
+          {result.kind === "ipa" && (
+            <Card title="App information">
+              {ios?.info ? (
+                <dl>
+                  {ios.info.appName && <InfoRow label="Application name" value={ios.info.appName} />}
+                  {ios.info.bundleId && <InfoRow label="Bundle identifier" value={ios.info.bundleId} />}
+                  {ios.info.version && <InfoRow label="Version" value={ios.info.version} />}
+                  {ios.info.build && <InfoRow label="Build" value={ios.info.build} />}
+                  {ios.info.minOs && <InfoRow label="Minimum iOS" value={ios.info.minOs} />}
+                  <InfoRow label="File size" value={formatBytes(result.fileSizeBytes)} />
+                </dl>
+              ) : (
+                <p className="text-sm text-muted">
+                  {ios?.infoError ?? "App information unavailable."}
+                </p>
+              )}
+            </Card>
+          )}
         </>
       )}
     </div>
