@@ -1,0 +1,51 @@
+name: Deploy
+
+# Deploys only on version tags (e.g. v1.0.0, v1.2.3) — pushing to main
+# does NOT deploy. Release flow: git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Least privilege: the workflow only needs to read the repo.
+# Deployment auth comes from the Cloudflare secrets, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Actions are pinned to commit SHAs (not tags) so a hijacked tag
+      # can't run untrusted code with access to the Cloudflare secrets.
+      # Dependabot keeps these pins updated.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      # Runs `next build` internally, then adapts the output for Workers
+      - name: Build (Next.js + OpenNext)
+        run: npx opennextjs-cloudflare build
+
+      # Populates the prerender cache into assets, then runs `wrangler deploy`.
+      # Do NOT swap this for plain `wrangler deploy` — without the cache
+      # population step, /apps/[slug] pages 404 in production.
+      - name: Deploy to Cloudflare Workers
+        run: npx opennextjs-cloudflare deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

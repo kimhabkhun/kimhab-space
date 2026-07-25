@@ -5,6 +5,11 @@
 /.next/
 /out/
 
+# cloudflare / opennext
+/.open-next/
+/.wrangler/
+cloudflare-env.d.ts
+
 # misc
 .DS_Store
 *.pem
@@ -14,3 +19,4 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+tokens.txt

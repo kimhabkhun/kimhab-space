@@ -3,6 +3,7 @@ import { Unbounded, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { SITE_URL } from "@/lib/site";
 
 const unbounded = Unbounded({
   subsets: ["latin"],
@@ -23,12 +24,18 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Kimhab Space — free apps, no catch",
     template: "%s · Kimhab Space",
   },
   description:
     "One developer's personal universe of free Android apps. No ads, no tracking, checksum-verified downloads.",
+  openGraph: {
+    siteName: "Kimhab Space",
+    type: "website",
+    url: SITE_URL,
+  },
 };
 
 export const viewport: Viewport = {

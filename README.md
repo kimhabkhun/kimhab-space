@@ -1,28 +1,60 @@
 # Kimhab Space 🪐
 
-A free, safe download hub for my Android apps (iOS later). Fully static —
-no server, no database, no admin panel. All app data lives in **one file**:
-[`data/apps.ts`](data/apps.ts).
+A free, safe download hub for my Android apps (iOS later). No database, no
+admin panel — every page is prerendered as static HTML at build time, and
+all app data lives in **one file**: [`data/apps.ts`](data/apps.ts).
 
-Built with Next.js 15 (App Router, static export), TypeScript strict,
-Tailwind CSS v4, and Framer Motion.
+Built with Next.js 15 (App Router), TypeScript strict, Tailwind CSS v4, and
+Framer Motion. Deployed to Cloudflare Workers via
+[OpenNext](https://opennext.js.org/cloudflare).
 
 ## Quick start
 
 ```bash
 npm install
 npm run dev        # local dev at http://localhost:3000
-npx next build     # static export → ./out
+npm run check      # typecheck
+npm run preview    # build + run the real Cloudflare Worker locally
+npm run deploy     # build + deploy to Cloudflare (needs `npx wrangler login`)
 ```
 
-## Deploying to Cloudflare Pages
+## Deployment (GitHub → Actions → Cloudflare Workers)
+
+Deploys happen on **version tags** (`v*.*.*`), not on pushes to `main` —
+so you can push work-in-progress freely and only ship when you tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0   # ← this triggers the deploy
+```
+
+The workflow ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml))
+then runs: install → typecheck → OpenNext build → deploy.
+
+One-time setup:
 
 1. Push this repo to GitHub.
-2. In Cloudflare Pages: **Create project → connect the repo**.
-3. Settings:
-   - **Build command:** `npx next build`
-   - **Build output directory:** `out`
-4. Deploy. That's it — the site is 100% static files.
+2. Create a Cloudflare API token (dash.cloudflare.com → Profile →
+   **API Tokens** → Create Token) with permissions:
+   - **Account → Workers Scripts: Edit**
+   - **Account → Account Settings: Read**
+3. Grab your **Account ID** (Cloudflare dashboard → Workers & Pages →
+   right sidebar).
+4. In the GitHub repo: **Settings → Secrets and variables → Actions**, add:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+5. Add the `kimhab.space` domain to your Cloudflare account (register it
+   there, or add it as a site and point its nameservers to Cloudflare).
+6. Tag a release (`git tag v1.0.0 && git push origin v1.0.0`).
+   The deploy automatically attaches the custom domains
+   declared in `wrangler.jsonc` (`kimhab.space` + `www.kimhab.space`) with
+   automatic HTTPS. If the domain isn't in your Cloudflare account yet,
+   comment out the `routes` block in `wrangler.jsonc` until it is — the
+   site then serves from `https://kimhab-space.<your-subdomain>.workers.dev`.
+
+Config lives in [`wrangler.jsonc`](wrangler.jsonc) (Worker name, assets) and
+[`open-next.config.ts`](open-next.config.ts) (adapter defaults — fine as-is
+for a fully prerendered site).
 
 ## How to add a new app
 
@@ -65,8 +97,9 @@ npx next build     # static export → ./out
 },
 ```
 
-5. `git push` — Cloudflare rebuilds and the new version goes live with its
-   own timeline node, download button, and checksum chip.
+5. `git push`, then tag the release: `git tag v1.3.0 && git push origin v1.3.0`
+   — GitHub Actions rebuilds and deploys, and the new version goes live with
+   its own timeline node, download button, and checksum chip.
 
 > ⚠️ **Before going live:** every `mediafireUrl` and `sha256` currently in
 > `data/apps.ts` is a placeholder marked `TODO`. Replace them with real

@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kimhab-space",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // Custom domain — attached automatically on every deploy.
+  // PREREQUISITE: the kimhab.space zone must exist in your Cloudflare
+  // account first (add the site / register the domain there). If you
+  // deploy before that, wrangler fails with "zone not found" — in that
+  // case comment these routes out, deploy, and re-enable later.
+  "routes": [
+    { "pattern": "kimhab.space", "custom_domain": true },
+    { "pattern": "www.kimhab.space", "custom_domain": true }
+  ]
+}

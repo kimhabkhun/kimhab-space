@@ -1,0 +1,19 @@
+# Keeps dependencies patched (this is how the npm-audit advisories in
+# next/sharp/postcss get resolved as upstream releases fixes) and keeps
+# the SHA-pinned GitHub Actions in deploy.yml up to date.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
