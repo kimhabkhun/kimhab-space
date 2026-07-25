@@ -40,7 +40,7 @@ export default function ContactPage() {
         </a>
 
         <a
-          href="https://t.me/TODO_REPLACE_TELEGRAM"
+          href="https://t.me/kimhabkhun"
           target="_blank"
           rel="noopener noreferrer"
           className="group rounded-[20px] border border-white/[0.06] bg-surface p-6 transition-colors hover:border-aurora/50"
